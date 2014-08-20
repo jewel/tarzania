@@ -16,13 +16,13 @@ class Rope
   constructor: (x, y, length) ->
     @pos = new Vector x, y
     @vector = new Vector 0, -length
-    @velocity = 0
+    @velocity = new Vector 0, 0
 
 our_size = 5
 pos = new Vector 25, 500
 velocity = new Vector 5, 0
 clutch = null
-clutch_len = 0
+clutch_len = null
 
 ropes = [
   new Rope( 100, 600, 400 )
@@ -107,37 +107,30 @@ change_state = ->
       closest = pos.intersection( r.pos, r.pos.plus( r.vector ) )
       continue unless closest
       continue if pos.distance( closest ) > our_size + velocity.length()
-      clutch = r
-      r.velocity = velocity.length()
-      if velocity.x < 0
-        r.velocity = -r.velocity
-      velocity.x = 0
-      velocity.y = 0
+      r.velocity = velocity.clone()
       clutch_len = pos.distance r.pos
+      clutch = r
 
   if clutch && !keys_pressed[32]
-    r = clutch
-    velocity.x = r.vector.y
-    velocity.y = -r.vector.x
-    velocity.normalize().mult(-r.velocity)
+    velocity = clutch.velocity.clone()
     clutch = null
+
+  # gravity
+  velocity.y -= 0.5
+
+  for r in ropes
+    v = r.velocity
+    v.y -= 0.5
+    projection_magnitude = v.dot r.vector.normalized()
+    # velocity parallel to rope
+    projection = r.vector.normalized().mult(projection_magnitude)
+    v.sub projection
+    r.vector.add v
 
   if clutch
     pos = clutch.pos.plus( clutch.vector.normalized().mult( clutch_len ) )
   else
-    # gravity
-    velocity.y -= 0.5
-    pos.add( velocity )
-
-
-  for r in ropes
-    v = r.vector
-    l = v.length()
-    v.x += r.velocity
-    v.normalize()
-    if Math.abs(v.y) < 0.4
-      r.velocity = -r.velocity
-    v.mult(l)
+    pos.add velocity
 
   if pos.x < 0
      pos.x = 0
@@ -147,33 +140,15 @@ change_state = ->
   if pos.y < 0
      pos.y = 0
      velocity.y = -velocity.y
-     velocity.mult(1.0)
+     velocity.mult(0.75)
 
   if pos.x > canvas.width
      pos.x = canvas.width
      velocity.x = -velocity.x
      velocity.mult(0.75)
 
-  reload-- if reload > 0
-
-  bullet = null
-
-  if mouse_pressed && mouse_position && reload == 0
-    dir = new Vector( mouse_position.clientX + window.scrollX - canvas.offsetLeft,
-                      mouse_position.clientY + window.scrollY - canvas.offsetTop )
-    dir.sub(pos)
-    dir.normalize()
-    dir.mult( 10 )
-
-    bullet =
-      pos: pos.plus(dir)
-      dir: dir
-
-    reload = 3
-
   socket.emit 'update'
     pos: pos
-    bullet: bullet
     name: name
 
   time_diff = new Date().getTime() - last_received
